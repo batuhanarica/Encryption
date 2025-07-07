@@ -1,0 +1,4 @@
+/home/b2/Desktop/B2/CDRApp/CDR_encrypted1.csv
+/home/b2/Desktop/stc01072025.pk12
+/home/b2/Desktop/B2/CDRApp/decrypted_output.csv
+

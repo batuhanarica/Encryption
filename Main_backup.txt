@@ -1,0 +1,157 @@
+package org.example;
+
+import java.security.PrivateKey;
+import java.util.Map;
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        PrivateKey rsaPrivateKey = null;
+        
+        // Get CSV file path
+        System.out.print("Please enter CSV file path: ");
+        String csvFilePath = scanner.nextLine().trim();
+        
+        // Get RSA key path
+        System.out.print("Please enter RSA key path: ");
+        String rsaKeyPath = scanner.nextLine().trim();
+        
+        // Get key password
+        System.out.print("Please enter key password: ");
+        String keyPassword = scanner.nextLine().trim();
+        
+        // Get key alias
+        System.out.print("Please enter key alias: ");
+        String keyAlias = scanner.nextLine().trim();
+        
+        // Display the entered values for verification
+        System.out.println("\n--- Input Summary ---");
+        System.out.println("CSV File Path: " + csvFilePath);
+        System.out.println("RSA Key Path: " + rsaKeyPath);
+        System.out.println("Key Password: " + keyPassword);
+        System.out.println("Key Alias: " + keyAlias);
+        System.out.println("--------------------\n");
+        
+
+
+        //Take header from CSV file
+        String[] headers = CSVHandler.getHeaders(csvFilePath);
+        if (headers == null) {
+            System.out.println("No headers found in CSV");
+        } else {
+            System.out.println("CSV Headers found: " + java.util.Arrays.toString(headers));
+            System.out.println("--- CSV Data ---\n\n\n");
+        }
+        //Find headers including "ENCRYP()"
+        Map <Integer, String> encryptedHeaders = CSVHandler.getEncryptedHeaders(csvFilePath);
+        if (!encryptedHeaders.isEmpty()) {
+            System.out.println("Encrypted columns found: " + encryptedHeaders);
+        } else {
+            System.out.println("No encrypted columns found in CSV");
+        }
+
+        //Load RSA private key from PKCS12 keystore
+        System.out.println("Loading RSA private key from PKCS12 keystore...");
+        if (rsaKeyPath.isEmpty() || keyPassword.isEmpty() || keyAlias.isEmpty()) {
+            System.err.println("Error: RSA key path, password, and alias must not be empty.");
+            return;
+        }
+        try {
+            rsaPrivateKey = RSADecryption.loadPrivateKeyFromPKCS12(rsaKeyPath, keyPassword, keyAlias);
+            System.out.println("Private key loaded successfully.");
+        }
+        catch (Exception e) {
+            System.err.println("Error loading private key: " + e.getMessage());
+            return;
+        }
+        
+        //Decrypt AES key using RSA private key
+        //Decrypt AES key using RSA private key from encryptedHeaders
+        System.out.println("Decrypting AES keys...");
+        Map<Integer, javax.crypto.SecretKey> decryptedAESKeys = new java.util.HashMap<>();
+        
+        for (Map.Entry<Integer, String> entry : encryptedHeaders.entrySet()) {
+            int columnIndex = entry.getKey();
+            String encryptedAESKeyBase64 = entry.getValue();
+            
+            System.out.println("Decrypting AES key for column " + columnIndex + " (header: " + headers[columnIndex] + ")");
+            
+            try {
+                // Decrypt the AES key using RSA private key
+                byte[] decryptedAESKeyBytes = AESDecryption.decryptAESKey(encryptedAESKeyBase64, rsaPrivateKey);
+                
+                if (decryptedAESKeyBytes != null) {
+                    // Convert byte array to AES SecretKey
+                    javax.crypto.SecretKey aesKey = AESDecryption.byteArrayToAESKey(decryptedAESKeyBytes);
+                    
+                    if (aesKey != null) {
+                        decryptedAESKeys.put(columnIndex, aesKey);
+                        System.out.println("AES key decrypted successfully for column " + columnIndex);
+                    } else {
+                        System.err.println("Failed to convert decrypted bytes to AES key for column " + columnIndex);
+                    }
+                } else {
+                    System.err.println("Failed to decrypt AES key for column " + columnIndex);
+                }
+            } catch (Exception e) {
+                System.err.println("Error decrypting AES key for column " + columnIndex + ": " + e.getMessage());
+            }
+        }
+        System.out.println("Successfully decrypted " + decryptedAESKeys.size() + " AES keys out of " + encryptedHeaders.size() + " encrypted columns");
+
+        //For encrypted columns, split IV and encrypted data
+        System.out.println("Splitting IV and encrypted data for each encrypted column...");
+        Map<Integer, InitVector.IVAndData> ivAndDataMap = new java.util.HashMap<>();
+        for (Map.Entry<Integer, String> entry : encryptedHeaders.entrySet()) {
+            int columnIndex = entry.getKey();
+            String encryptedData = entry.getValue();
+
+            // Split the IV and encrypted data
+            InitVector.IVAndData ivAndData = InitVector.splitIVAndEncryptedData(encryptedData);
+            ivAndDataMap.put(columnIndex, ivAndData);
+        }
+
+        //Print IV 
+        System.out.println("Initialization Vectors (IV) and Encrypted Data:");
+        for (Map.Entry<Integer, InitVector.IVAndData> entry : ivAndDataMap.entrySet()) {
+            int columnIndex = entry.getKey();
+            InitVector.IVAndData ivAndData = entry.getValue();
+            System.out.println("Column " + columnIndex + ":");
+            System.out.println("  IV: " + java.util.Base64.getEncoder().encodeToString(ivAndData.iv));
+            System.out.println("  Encrypted Data: " + java.util.Base64.getEncoder().encodeToString(ivAndData.encryptedData));
+        }
+
+        //Decrypt field values using AES keys and IVs
+        System.out.println("Decrypting field values for encrypted columns...");
+        for (Map.Entry<Integer, javax.crypto.SecretKey> entry : decryptedAESKeys.entrySet()) {
+            int columnIndex = entry.getKey();
+            javax.crypto.SecretKey aesKey = entry.getValue();
+
+        }
+        for (Map.Entry<Integer, InitVector.IVAndData> entry : ivAndDataMap.entrySet()) {
+            int columnIndex = entry.getKey();
+            InitVector.IVAndData ivAndData = entry.getValue();
+            javax.crypto.SecretKey aesKey = decryptedAESKeys.get(columnIndex);
+
+            if (aesKey != null && ivAndData != null) {
+                try {
+                    // Decrypt the field value using AES key and IV
+                    String encryptedFieldValue = encryptedHeaders.get(columnIndex);
+                    String decryptedFieldValue = AESDecryption.decryptFieldValue(encryptedFieldValue, aesKey, ivAndData.iv);
+                    
+                    System.out.println("Decrypted value for column " + columnIndex + ": " + decryptedFieldValue);
+                } catch (Exception e) {
+                    System.err.println("Error decrypting field value for column " + columnIndex + ": " + e.getMessage());
+                }
+            } else {
+                System.err.println("No AES key or IV found for column " + columnIndex);
+            }
+        }
+        System.out.println("Decryption process completed.");
+        scanner.close();
+
+
+        
+    }
+}
