@@ -45,4 +45,6 @@ public class InitVector {
         //Function to split IV and encrypted data using default AES block size (16 bytes)
         return splitIVAndEncryptedData(base64EncodedData, 16);
     }
+
+    
 }
