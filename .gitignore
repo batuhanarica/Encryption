@@ -36,3 +36,18 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Application specific files ###
+# Lock files
+.~lock.*
+
+# Backup files
+*_backup.txt
+*.backup
+
+# Output files
+*_output.csv
+decrypted_output.csv
+
+# Configuration files with paths
+paths.txt
