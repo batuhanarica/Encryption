@@ -1,13 +1,9 @@
 package org.example;
 
 import java.io.FileInputStream;
-import java.security.cert.Certificate;
 import java.security.Key;
-import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.util.Base64;
 import java.util.Enumeration;
 
 public class RSADecryption {
@@ -28,44 +24,6 @@ public class RSADecryption {
         }
     }
 
-    public static String decodeBase64(String encodedData) {
-        //Function to decode Base64 encoded data
-        try {
-            byte[] decodedBytes = Base64.getDecoder().decode(encodedData);
-            return new String(decodedBytes);
-        } catch (IllegalArgumentException e) {
-            System.err.println("Error: Invalid Base64 input - " + e.getMessage());
-            return null;
-        }
-    }
-
-    public static byte[] decodeBase64ToBytes(String encodedData) {
-        //Function to decode Base64 encoded data and return as byte array
-        try {
-            return Base64.getDecoder().decode(encodedData);
-        } catch (IllegalArgumentException e) {
-            System.err.println("Error: Invalid Base64 input - " + e.getMessage());
-            return null;
-        }
-    }
-    
-    public static KeyPair loadKeyPairFromPKCS12(String keystorePath, String keystorePassword, String alias) throws Exception {
-        KeyStore keystore = KeyStore.getInstance("PKCS12");
-        try (FileInputStream fis = new FileInputStream(keystorePath)) {
-            keystore.load(fis, keystorePassword.toCharArray());
-        }
-
-        Key key = keystore.getKey(alias, keystorePassword.toCharArray());
-        if (!(key instanceof PrivateKey)) {
-            throw new RuntimeException("Not a private key under alias: " + alias);
-        }
-
-        Certificate cert = keystore.getCertificate(alias);
-        PublicKey publicKey = cert.getPublicKey();
-        PrivateKey privateKey = (PrivateKey) key;
-
-        return new KeyPair(publicKey, privateKey);
-    }
 
     public static PrivateKey loadPrivateKeyFromPKCS12(String pkcs12FilePath, String password, String alias) {
         //Function to load private key from PKCS12 file with detailed debugging

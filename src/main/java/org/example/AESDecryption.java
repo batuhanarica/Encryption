@@ -5,12 +5,8 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.SecretKey;
 import java.security.PrivateKey;
-import java.security.KeyFactory;
-import java.security.KeyStore;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
-import java.util.Enumeration;
-import java.io.FileInputStream;
+import java.util.Map;
 
 public class AESDecryption {
     
@@ -89,28 +85,7 @@ public class AESDecryption {
             return null;
         }
     }
-    
-    public static String decryptFieldValue(String encryptedFieldValue, SecretKey aesKey, byte[] iv) {
-        //Function to decrypt field value using AES key and initialization vector (CFB mode)
-        try {
-            // Initialize AES cipher in CFB mode for decryption
-            Cipher aesCipher = Cipher.getInstance("AES/CFB/NoPadding");
-            IvParameterSpec ivSpec = new IvParameterSpec(iv);
-            aesCipher.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
-            
-            // Decode the Base64 encoded encrypted field value
-            byte[] encryptedBytes = Base64.getDecoder().decode(encryptedFieldValue);
-            
-            // Decrypt the field value
-            byte[] decryptedBytes = aesCipher.doFinal(encryptedBytes);
-            
-            // Convert decrypted bytes to string
-            return new String(decryptedBytes, "UTF-8");
-        } catch (Exception e) {
-            System.err.println("Error decrypting field value: " + e.getMessage());
-            return null;
-        }
-    }
+
     
     public static String cleanFieldValue(String fieldValue) {
         //Function to clean field value by removing quotes and extra characters
@@ -185,57 +160,112 @@ public class AESDecryption {
         }
     }
 
-    public static String decryptFieldValueWithCustomIV(String encryptedFieldValue, SecretKey aesKey, int ivLength) {
-        //Function to decrypt field value with custom IV length
-        try {
-            debugPrint("=== FIELD VALUE DECRYPTION (Custom IV) ===");
-            debugPrint("Original input: " + encryptedFieldValue);
-            
-            // Clean the field value first
-            String cleanedFieldValue = cleanFieldValue(encryptedFieldValue);
-            debugPrint("Cleaned input: " + cleanedFieldValue);
-            
-            if (cleanedFieldValue == null || cleanedFieldValue.isEmpty()) {
-                System.err.println("Error: Field value is null or empty after cleaning");
-                return null;
-            }
-            
-            debugPrint("Cleaned field value length: " + cleanedFieldValue.length());
-            debugPrint("Custom IV length: " + ivLength + " bytes");
-            
-            // Split IV and encrypted data with custom IV length
-            InitVector.IVAndData ivAndData = InitVector.splitIVAndEncryptedData(cleanedFieldValue, ivLength);
-            
-            if (ivAndData == null) {
-                System.err.println("Error: Failed to split IV and encrypted data from field value");
-                return null;
-            }
-            
-            debugPrint("IV length: " + ivAndData.iv.length + " bytes");
-            debugPrint("Encrypted data length: " + ivAndData.encryptedData.length + " bytes");
-            
-            // Initialize AES cipher in CFB mode for decryption
-            Cipher aesCipher = Cipher.getInstance("AES/CFB/NoPadding");
-            IvParameterSpec ivSpec = new IvParameterSpec(ivAndData.iv);
-            aesCipher.init(Cipher.DECRYPT_MODE, aesKey, ivSpec);
-            
-            // Decrypt the field value
-            byte[] decryptedBytes = aesCipher.doFinal(ivAndData.encryptedData);
-            
-            // Convert decrypted bytes to string
-            String decryptedValue = new String(decryptedBytes, "UTF-8");
-            
-            debugPrint("Decryption successful. Decrypted value length: " + decryptedValue.length());
-            debugPrint("Decrypted value: " + decryptedValue);
-            debugPrint("=== DECRYPTION COMPLETE ===");
-            
-            return decryptedValue;
-            
-        } catch (Exception e) {
-            System.err.println("Error decrypting field value: " + e.getMessage());
-            debugPrint("=== DECRYPTION FAILED ===");
-            e.printStackTrace();
+    
+    public static boolean isEnclosedInQuotes(String value) {
+        //Function to check if value is enclosed in single quotes
+        if (value == null || value.length() < 2) {
+            return false;
+        }
+        
+        String trimmed = value.trim();
+        
+        // Check for double quotes containing single quotes: "'value'"
+        if (trimmed.startsWith("\"'") && trimmed.endsWith("'\"")) {
+            return true;
+        }
+        
+        // Check for direct single quotes: 'value'
+        if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    public static String extractValueFromQuotes(String quotedValue) {
+        //Function to extract the actual value from between quotes
+        if (quotedValue == null) {
             return null;
         }
+        
+        String trimmed = quotedValue.trim();
+        
+        // Handle double quotes containing single quotes: "'value'" -> value
+        if (trimmed.startsWith("\"'") && trimmed.endsWith("'\"")) {
+            return trimmed.substring(2, trimmed.length() - 2);
+        }
+        
+        // Handle direct single quotes: 'value' -> value
+        if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        
+        return trimmed;
+    }
+
+    public static boolean looksLikeEncryptedData(String value) {
+        //Function to determine if a value looks like encrypted Base64 data
+        if (value == null || value.length() < 16) {
+            return false;
+        }
+        
+        // Check if it's valid Base64 format
+        try {
+            Base64.getDecoder().decode(value);
+            
+            // Additional checks for encrypted data characteristics
+            // Encrypted data is usually longer and contains mix of characters
+            boolean hasUpperCase = value.matches(".*[A-Z].*");
+            boolean hasLowerCase = value.matches(".*[a-z].*");
+            boolean hasNumbers = value.matches(".*[0-9].*");
+            boolean hasBase64Chars = value.matches(".*[+/].*");
+            
+            // If it has Base64 characteristics and reasonable length, consider it encrypted
+            return value.length() >= 16 && (hasUpperCase || hasLowerCase) && 
+                   (hasNumbers || hasBase64Chars);
+            
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static String tryDecryptQuotedValue(String quotedValue, Map<Integer, SecretKey> availableKeys) {
+        //Function to try decrypting a quoted value with all available AES keys
+        if (!isEnclosedInQuotes(quotedValue)) {
+            return quotedValue; // Not quoted, return as-is
+        }
+        
+        // Extract the value from quotes
+        String extractedValue = extractValueFromQuotes(quotedValue);
+        
+        // Check if it looks like encrypted data
+        if (!looksLikeEncryptedData(extractedValue)) {
+            return quotedValue; // Doesn't look encrypted, return original
+        }
+        
+        debugPrint("=== TRYING TO DECRYPT QUOTED VALUE ===");
+        debugPrint("Original quoted value: " + quotedValue);
+        debugPrint("Extracted value: " + extractedValue);
+        
+        // Try each available AES key
+        for (Map.Entry<Integer, SecretKey> keyEntry : availableKeys.entrySet()) {
+            SecretKey aesKey = keyEntry.getValue();
+            debugPrint("Trying AES key from column " + keyEntry.getKey());
+            
+            try {
+                String decryptedValue = decryptFieldValueComplete("'" + extractedValue + "'", aesKey);
+                
+                if (decryptedValue != null && !decryptedValue.trim().isEmpty()) {
+                    debugPrint("SUCCESS: Decrypted with key from column " + keyEntry.getKey());
+                    debugPrint("Decrypted value: " + decryptedValue);
+                    return "'" + decryptedValue + "'"; // Return in quotes format
+                }
+            } catch (Exception e) {
+                debugPrint("Failed with key from column " + keyEntry.getKey() + ": " + e.getMessage());
+            }
+        }
+        
+        debugPrint("All decryption attempts failed, returning original value");
+        return quotedValue; // Return original if all attempts fail
     }
 }

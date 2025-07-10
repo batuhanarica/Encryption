@@ -30,27 +30,6 @@ public class CSVHandler {
         }
     }
 
-    public static void readDataByLine(String file, String delimiter) {
-        //Function to read CSV format data line by line
-        try (
-                FileReader fileReader = new FileReader(file);
-                CSVReader csvReader = new CSVReader(fileReader)
-        ) {
-            String[] nextRecord;
-
-            while ((nextRecord = csvReader.readNext()) != null) {
-                for (int i = 0; i < nextRecord.length; i++) {
-                    System.out.print(nextRecord[i]);
-                    if (i < nextRecord.length - 1) {
-                        System.out.print(delimiter);
-                    }
-                }
-                System.out.println();
-            }
-        } catch (Exception e) {
-            logger.log(Level.WARNING, "Error occurs while reading data line by line", e);
-        }
-    }
 
     public static String[] getHeaders(String file) {
         //Function to get the headers (first line) of a CSV file as an array
@@ -66,26 +45,6 @@ public class CSVHandler {
         }
     }
 
-    public static String[] getColumn(String file, int columnIndex) {
-        //Function to get a specific column from the CSV file as an array
-        try (
-                FileReader fileReader = new FileReader(file);
-                CSVReader csvReader = new CSVReader(fileReader)
-        ) {
-            String[] nextRecord;
-            List<String> columnData = new ArrayList<>();
-
-            while ((nextRecord = csvReader.readNext()) != null) {
-                if (columnIndex < nextRecord.length) {
-                    columnData.add(nextRecord[columnIndex]);
-                }
-            }
-            return columnData.toArray(new String[0]);
-        } catch (Exception e) {
-            logger.log(Level.WARNING, "Error occurs while reading CSV column", e);
-            return null;
-        }
-    }
 
     public static Map<Integer, String> getEncryptedHeaders(String file) {
         //Function to find headers with ENCRYPT(something) pattern and return index and content
@@ -109,17 +68,17 @@ public class CSVHandler {
 
     public static boolean createDecryptedCSV(String inputFile, String outputFile, 
                                        Map<Integer, javax.crypto.SecretKey> decryptedAESKeys) {
-        //Function to create output CSV with decrypted data ONLY for columns with encrypted headers
+        //Function to create output CSV with decrypted data for ALL quoted values
         try (
                 FileReader fileReader = new FileReader(inputFile);
                 CSVReader csvReader = new CSVReader(fileReader);
                 FileWriter fileWriter = new FileWriter(outputFile);
                 CSVWriter csvWriter = new CSVWriter(fileWriter)
         ) {
-            debugPrint("=== CSV DECRYPTION PROCESS ===");
+            debugPrint("=== CSV DECRYPTION PROCESS (ALL QUOTED VALUES) ===");
             debugPrint("Input file: " + inputFile);
             debugPrint("Output file: " + outputFile);
-            debugPrint("AES keys available for columns: " + decryptedAESKeys.keySet());
+            debugPrint("AES keys available: " + decryptedAESKeys.size());
 
             String[] nextLine;
             int rowIndex = 0;
@@ -132,39 +91,24 @@ public class CSVHandler {
                 for (int columnIndex = 0; columnIndex < nextLine.length; columnIndex++) {
                     String originalValue = nextLine[columnIndex];
                     
-                    // Check if this column has an AES key (meaning it's encrypted)
-                    if (decryptedAESKeys.containsKey(columnIndex)) {
-                        debugPrint("Decrypting column " + columnIndex + " in row " + rowIndex);
-                        debugPrint("Original encrypted value: " + originalValue);
-                        
-                        // Skip header row or empty values
-                        if (rowIndex == 0 || originalValue == null || originalValue.trim().isEmpty()) {
-                            processedLine[columnIndex] = originalValue;
-                            debugPrint("Skipping decryption (header row or empty value)");
-                        } else {
-                            // Get the AES key for this column
-                            javax.crypto.SecretKey aesKey = decryptedAESKeys.get(columnIndex);
-                            
-                            try {
-                                // Decrypt the field value using the AES key
-                                String decryptedValue = AESDecryption.decryptFieldValueComplete(originalValue, aesKey);
-                                
-                                if (decryptedValue != null) {
-                                    processedLine[columnIndex] = "'" + decryptedValue + "'";
-                                    debugPrint("Decryption successful: " + decryptedValue);
-                                } else {
-                                    // If decryption fails, keep original value
-                                    processedLine[columnIndex] = originalValue;
-                                    debugPrint("Decryption failed, keeping original value");
-                                }
-                            } catch (Exception e) {
-                                System.err.println("Error decrypting value in row " + rowIndex + ", column " + columnIndex + ": " + e.getMessage());
-                                processedLine[columnIndex] = originalValue; // Keep original on error
-                            }
-                        }
-                    } else {
-                        // Column is not encrypted, keep original value
+                    // For header row (row 0), keep the original header
+                    if (rowIndex == 0) {
                         processedLine[columnIndex] = originalValue;
+                        debugPrint("Header row - keeping original: " + originalValue);
+                    } 
+                    // For data rows, check if value is quoted and try to decrypt
+                    else {
+                        debugPrint("Processing column " + columnIndex + " value: " + originalValue);
+                        
+                        // Try to decrypt if it's a quoted value
+                        String processedValue = AESDecryption.tryDecryptQuotedValue(originalValue, decryptedAESKeys);
+                        processedLine[columnIndex] = processedValue;
+                        
+                        if (!processedValue.equals(originalValue)) {
+                            debugPrint("DECRYPTED: " + originalValue + " -> " + processedValue);
+                        } else {
+                            debugPrint("UNCHANGED: " + originalValue);
+                        }
                     }
                 }
                 
@@ -263,97 +207,7 @@ public class CSVHandler {
             return false;
         }
     }
-    
-    public static boolean createDecryptedCSVSmart(String inputFile, String outputFile, 
-                                            Map<Integer, javax.crypto.SecretKey> decryptedAESKeys) {
-        //Function to create output CSV with smart decryption (detects encrypted values automatically)
-        try (
-                FileReader fileReader = new FileReader(inputFile);
-                CSVReader csvReader = new CSVReader(fileReader);
-                FileWriter fileWriter = new FileWriter(outputFile);
-                CSVWriter csvWriter = new CSVWriter(fileWriter)
-        ) {
-            debugPrint("=== CSV SMART DECRYPTION PROCESS ===");
 
-            String[] nextLine;
-            int rowIndex = 0;
-            
-            while ((nextLine = csvReader.readNext()) != null) {
-                String[] processedLine = new String[nextLine.length];
-                
-                for (int columnIndex = 0; columnIndex < nextLine.length; columnIndex++) {
-                    String originalValue = nextLine[columnIndex];
-                    
-                    if (rowIndex == 0) {
-                        // Header row
-                        processedLine[columnIndex] = originalValue;
-                    } else if (originalValue != null && !originalValue.trim().isEmpty()) {
-                        // Check if this looks like encrypted data (Base64 pattern)
-                        String cleanedValue = AESDecryption.cleanFieldValue(originalValue);
-                        
-                        if (isLikelyEncryptedData(cleanedValue)) {
-                            debugPrint("Column " + columnIndex + " appears to contain encrypted data: " + cleanedValue);
-                            
-                            // Try to decrypt with available keys
-                            String decryptedValue = tryDecryptWithAllKeys(cleanedValue, decryptedAESKeys);
-                            
-                            if (decryptedValue != null) {
-                                processedLine[columnIndex] = "'" + decryptedValue + "'";
-                                debugPrint("Successfully decrypted: " + decryptedValue);
-                            } else {
-                                processedLine[columnIndex] = originalValue;
-                                debugPrint("Decryption failed, keeping original");
-                            }
-                        } else {
-                            // Doesn't look encrypted, keep original
-                            processedLine[columnIndex] = originalValue;
-                        }
-                    } else {
-                        processedLine[columnIndex] = originalValue;
-                    }
-                }
-                
-                csvWriter.writeNext(processedLine);
-                rowIndex++;
-            }
-            
-            return true;
-            
-        } catch (Exception e) {
-            System.err.println("Error in smart CSV decryption: " + e.getMessage());
-            return false;
-        }
-    }
-
-    private static boolean isLikelyEncryptedData(String value) {
-        //Function to detect if a value looks like encrypted Base64 data
-        if (value == null || value.length() < 20) {
-            return false;
-        }
-        
-        // Check if it's valid Base64 and has reasonable length for encrypted data
-        try {
-            java.util.Base64.getDecoder().decode(value);
-            return value.length() >= 20 && value.matches("^[A-Za-z0-9+/]*={0,2}$");
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private static String tryDecryptWithAllKeys(String encryptedValue, Map<Integer, javax.crypto.SecretKey> keys) {
-        //Function to try decrypting with all available AES keys
-        for (javax.crypto.SecretKey key : keys.values()) {
-            try {
-                String result = AESDecryption.decryptFieldValueComplete("'" + encryptedValue + "'", key);
-                if (result != null && !result.trim().isEmpty()) {
-                    return result;
-                }
-            } catch (Exception e) {
-                // Continue trying other keys
-            }
-        }
-        return null;
-    }
     
     public static String extractBase64FromHeader(String header) {
         //Function to extract Base64 content from ENCRYPT() pattern in header
