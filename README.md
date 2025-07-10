@@ -1,4 +1,4 @@
-# CDR Application 2
+# CDR Application 
 
 A Call Detail Record (CDR) processing application that handles encrypted telecommunication data records.
 
