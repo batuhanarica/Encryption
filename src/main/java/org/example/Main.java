@@ -51,12 +51,54 @@ public class Main {
         String[] headers = CSVHandler.getHeaders(csvFilePath);
         if (headers == null) {
             System.out.println("No headers found in CSV");
+            return;
         } else {
             System.out.println("CSV Headers found: " + java.util.Arrays.toString(headers));
             if (debugMode) {
-                System.out.println("--- CSV Data ---\n\n\n");
+                System.out.println("--- CSV Data ---\n");
             }
         }
+        
+        // Check for parsing problems
+        System.out.print("Do you think there might be parsing problems with the CSV headers? (y/n): ");
+        String checkParsing = scanner.nextLine().trim().toLowerCase();
+        
+        if (checkParsing.equals("y") || checkParsing.equals("yes")) {
+            System.out.println("Checking for parsing problems...");
+            
+            if (debugMode) {
+                CSVHandler.debugParsingProblems(csvFilePath);
+            }
+            
+            boolean hasProblems = CSVHandler.hasParsingProblems(csvFilePath);
+            
+            if (hasProblems) {
+                System.out.println("⚠️  Parsing problems detected!");
+                System.out.print("Do you want to create an arranged CSV file to fix these problems? (y/n): ");
+                String fixProblems = scanner.nextLine().trim().toLowerCase();
+                
+                if (fixProblems.equals("y") || fixProblems.equals("yes")) {
+                    String arrangedFile = "arranged_input.csv";
+                    System.out.println("Creating arranged CSV file: " + arrangedFile);
+                    
+                    boolean success = CSVHandler.createArrangedCSV(csvFilePath, arrangedFile);
+                    
+                    if (success) {
+                        System.out.println("✓ Arranged CSV file created successfully: " + arrangedFile);
+                        System.out.println("Please restart the program using the arranged file: " + arrangedFile);
+                        System.out.println("Program will exit now.");
+                        scanner.close();
+                        return;
+                    } else {
+                        System.err.println("✗ Failed to create arranged CSV file");
+                        System.out.println("Continuing with original file...");
+                    }
+                }
+            } else {
+                System.out.println("✓ No parsing problems detected. Continuing with original file.");
+            }
+        }
+
         //Find headers including "ENCRYPT()"
         System.out.println("Analyzing encrypted headers...");
         if (debugMode) {
