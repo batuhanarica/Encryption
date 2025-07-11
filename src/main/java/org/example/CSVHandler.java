@@ -79,6 +79,12 @@ public class CSVHandler {
             debugPrint("Input file: " + inputFile);
             debugPrint("Output file: " + outputFile);
             debugPrint("AES keys available: " + decryptedAESKeys.size());
+            
+            // Debug: Show which columns have AES keys
+            debugPrint("Columns with AES keys:");
+            for (Integer col : decryptedAESKeys.keySet()) {
+                debugPrint("  Column " + col + " has AES key");
+            }
 
             String[] nextLine;
             int rowIndex = 0;
@@ -98,6 +104,23 @@ public class CSVHandler {
                     } 
                     // For data rows, check if value is quoted and try to decrypt
                     else {
+                        // Special debugging for problematic columns
+                        if ((columnIndex == 18 || columnIndex == 31) && rowIndex == 2) {
+                            debugPrint("=== SPECIAL DEBUG FOR COLUMN " + columnIndex + " ROW " + rowIndex + " ===");
+                            debugPrint("Original value: " + originalValue);
+                            debugPrint("Value length: " + (originalValue != null ? originalValue.length() : 0));
+                            debugPrint("Is quoted: " + AESDecryption.isEnclosedInQuotes(originalValue));
+                            if (AESDecryption.isEnclosedInQuotes(originalValue)) {
+                                String extracted = AESDecryption.extractValueFromQuotes(originalValue);
+                                debugPrint("Extracted value: " + extracted);
+                                debugPrint("Looks like encrypted: " + AESDecryption.looksLikeEncryptedData(extracted));
+                            }
+                            debugPrint("Available keys for this value:");
+                            for (Integer col : decryptedAESKeys.keySet()) {
+                                debugPrint("  Key from column " + col);
+                            }
+                        }
+                        
                         debugPrint("Processing column " + columnIndex + " value: " + originalValue);
                         
                         // Try to decrypt if it's a quoted value
@@ -108,6 +131,17 @@ public class CSVHandler {
                             debugPrint("DECRYPTED: " + originalValue + " -> " + processedValue);
                         } else {
                             debugPrint("UNCHANGED: " + originalValue);
+                            
+                            // Additional debug for problematic columns
+                            if ((columnIndex == 18 || columnIndex == 31) && rowIndex == 2) {
+                                debugPrint("=== WHY NOT DECRYPTED? ===");
+                                debugPrint("Column " + columnIndex + " in row " + rowIndex + " was not decrypted");
+                                debugPrint("This might be because:");
+                                debugPrint("1. Value is not properly quoted");
+                                debugPrint("2. Value doesn't look like encrypted data");
+                                debugPrint("3. No matching AES key found");
+                                debugPrint("4. All decryption attempts failed");
+                            }
                         }
                     }
                 }

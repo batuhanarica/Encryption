@@ -232,6 +232,7 @@ public class AESDecryption {
     public static String tryDecryptQuotedValue(String quotedValue, Map<Integer, SecretKey> availableKeys) {
         //Function to try decrypting a quoted value with all available AES keys
         if (!isEnclosedInQuotes(quotedValue)) {
+            debugPrint("Value not enclosed in quotes: " + quotedValue);
             return quotedValue; // Not quoted, return as-is
         }
         
@@ -240,12 +241,20 @@ public class AESDecryption {
         
         // Check if it looks like encrypted data
         if (!looksLikeEncryptedData(extractedValue)) {
+            debugPrint("Value doesn't look like encrypted data: " + extractedValue);
             return quotedValue; // Doesn't look encrypted, return original
         }
         
         debugPrint("=== TRYING TO DECRYPT QUOTED VALUE ===");
         debugPrint("Original quoted value: " + quotedValue);
         debugPrint("Extracted value: " + extractedValue);
+        debugPrint("Extracted value length: " + extractedValue.length());
+        debugPrint("Available keys count: " + availableKeys.size());
+        
+        // Show which keys are available
+        for (Integer columnIndex : availableKeys.keySet()) {
+            debugPrint("Available key from column: " + columnIndex);
+        }
         
         // Try each available AES key
         for (Map.Entry<Integer, SecretKey> keyEntry : availableKeys.entrySet()) {
@@ -255,9 +264,10 @@ public class AESDecryption {
             try {
                 String decryptedValue = decryptFieldValueComplete("'" + extractedValue + "'", aesKey);
                 
-                if (decryptedValue != null && !decryptedValue.trim().isEmpty()) {
+                // Accept any non-null decrypted value, including empty strings
+                if (decryptedValue != null) {
                     debugPrint("SUCCESS: Decrypted with key from column " + keyEntry.getKey());
-                    debugPrint("Decrypted value: " + decryptedValue);
+                    debugPrint("Decrypted value: '" + decryptedValue + "' (length: " + decryptedValue.length() + ")");
                     return "'" + decryptedValue + "'"; // Return in quotes format
                 }
             } catch (Exception e) {
@@ -265,7 +275,8 @@ public class AESDecryption {
             }
         }
         
-        debugPrint("All decryption attempts failed, returning original value");
+        debugPrint("All decryption attempts failed for value: " + extractedValue);
+        debugPrint("Returning original value: " + quotedValue);
         return quotedValue; // Return original if all attempts fail
     }
 }
